@@ -1,5 +1,7 @@
 unit native;
 
+{$mode ObjFPC}{$H+}
+
 interface
 
 const

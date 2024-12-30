@@ -2,8 +2,6 @@ unit system;
 
 {$mode ObjFPC}{$H+}
 
-//{$modeswitch advancedrecords}
-
 interface
 
 const
@@ -130,19 +128,25 @@ type
   tkDynArray, tkInterfaceRaw, tkProcVar, tkUString, tkUChar, tkHelper, tkFile,
   tkClassRef, tkPointer);
 
-  PJMP_BUF = ^JMP_BUF;
-  JMP_BUF = packed record
+  pjmp_buf = ^jmp_buf;
+  {$ifdef CPU64}
+  jmp_buf = packed record
     rbx, rbp, r12, r13, r14, r15, rsp, rip: qword;
-    {$ifdef CPU64}
     rsi, rdi: qword;
-    xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15: record
-      m1, m2: qword;
-    end;
+    xmm6, xmm7, xmm8, xmm9, xmm10, xmm11, xmm12, xmm13, xmm14, xmm15: record m1, m2: qword; end;
     mxcsr: longword;
     fpucw: word;
     padding: word;
-    {$endif CPU64}
   end;
+  {$else}
+  jmp_buf = packed record
+    ebx, esi, edi: LongInt;
+    bp, sp, pc: Pointer;
+    {$ifdef FPC_USE_WIN32_SEH}
+    exhead: Pointer;
+    {$endif FPC_USE_WIN32_SEH}
+  end;
+  {$endif}
 
   PExceptAddr = ^TExceptAddr;
   TExceptAddr = record
@@ -177,91 +181,34 @@ type
     );
   end;
 
-type
-  PAnsiRec = ^TAnsiRec;
-  TAnsiRec = record
-    codepage: Word;
-    elementsize: Word;
-    ref: LongInt;
-    len: SizeInt;
-  end;
+{$I types.inc}
 
 var
   FPC_EMPTYCHAR: AnsiChar; public name 'FPC_EMPTYCHAR';
-  ExitCode: hresult = 0; export name 'operatingsystem_result';
-  SysRegistryPath: Pointer = nil;
-  SysDriverObject: Pointer = nil;
+  ExitCode: HRESULT = 0; export name 'operatingsystem_result';
 
 const
-  LineEnding        = #13#10;
-  TextRecNameLength = 256;
-  TextRecBufSize    = 256;
-
-type
-  TLineEndStr = string [3];
-  TextBuf = array[0..TextRecBufSize - 1] of ansichar;
-  TTextBuf = TextBuf;
-
-  TextRec = record
-    Handle: THandle;
-    Mode: longint;
-    bufsize: SizeInt;
-    _private: SizeInt;
-    bufpos, bufend: SizeInt;
-    bufptr: ^textbuf;
-    openfunc, inoutfunc, flushfunc, closefunc: codepointer;
-    UserData: array[1..32] of byte;
-    name: array[0..textrecnamelength - 1] of TFileTextRecChar;
-    LineEnd: TLineEndStr;
-    buffer: textbuf;
-    CodePage: Word;
-    FullName: Pointer;
-  end;
+  LineEnding = #13#10;
 
 procedure fpc_initializeunits; compilerproc;
 procedure fpc_libinitializeunits; compilerproc;
 procedure fpc_do_exit; compilerproc;
 procedure fpc_lib_exit; compilerproc;
 
-procedure PASCALMAIN; external name 'PASCALMAIN';
+function DriverEntry(DriverObject: Pointer; RegistryPath: Pointer): LongInt; stdcall; external name 'DriverEntry';
+
+const
+  ntoskrnl = 'ntoskrnl.exe';
+
+function DbgPrint(aFormat: PAnsiChar): Integer; cdecl; varargs; external ntoskrnl;
+function DbgPrintEx(ComponentId: Integer; Level: Integer; Format: PAnsiChar): Integer; cdecl; external ntoskrnl;
 
 implementation
 
-//function _FPC_mainCRTStartup(DriverObject: Pointer; RegistryPath: Pointer): LongInt; stdcall; public name '_mainCRTStartup';
-//begin
-//  PASCALMAIN;
-//end;
-
-//procedure _WinMainCRTStartup; stdcall; public name '_WinMainCRTStartup';
-//begin
-//  PASCALMAIN;
-//end;
-
-// original DLL entry point
-//procedure _FPC_DLLMainCRTStartup(_hinstance : longint;_dllreason : dword;_dllparam:Pointer); stdcall;public name '_DLLMainCRTStartup';
-//begin
-//  PASCALMAIN;
-//end;
-
 function _FPC_DLLMainCRTStartup(DriverObject: Pointer; RegistryPath: Pointer): LongInt; stdcall; public name '_DLLMainCRTStartup';
 begin
-  SysDriverObject := DriverObject;
-  SysRegistryPath := RegistryPath;
-  PASCALMAIN;
-  result := ExitCode;
+  result := DriverEntry(DriverObject, RegistryPath);
 end;
-
-//procedure _FPC_DLLWinMainCRTStartup(_hinstance: longint; reason: dword; param: pointer); stdcall; public name '_DLLWinMainCRTStartup';
-//begin
-//  PASCALMAIN;
-//end;
-
-// in theory this should be the actual entry point for the drivers
-//function NtDriverEntry(DriverObject: Pointer; RegistryPath: Pointer): LongInt; stdcall; [public, alias: '_NtDriverEntry'];
-//begin
-  //PASCALMAIN;
-  //result := ExitCode;
-//end;
 
 procedure fpc_initializeunits; [public, alias: 'FPC_INITIALIZEUNITS'];
 begin
