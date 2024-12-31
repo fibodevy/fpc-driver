@@ -39,6 +39,7 @@ type
   Cardinal    = 0..$FFFFFFFF;
   HRESULT     = type LongInt;
   Int16       = Smallint;
+  Short       = Word;
   UInt16      = Word;
   Integer     = LongInt;
   Long        = LongInt;
@@ -60,6 +61,7 @@ type
   PtrUInt     = NativeUInt;
   SizeInt     = PtrInt;
   SizeUInt    = PtrUInt;
+  PPointer    = ^Pointer;
 
   HANDLE      = NativeUInt;
   HWND        = HANDLE;
@@ -155,9 +157,8 @@ type
     frametype: LongInt;
   end;
 
-  PGUID = ^TGuid;
   TGUID = packed record
-    case Byte of
+  case byte of
     1: (
       Data1: LongWord;
       Data2: Word;
@@ -171,7 +172,6 @@ type
       D4: array[0..7] of Byte;
     );
     3: (
-      { uuid fields according to RFC4122 }
       time_low: LongWord; // The low field of the timestamp
       time_mid: Word; // The middle field of the timestamp
       time_hi_and_version: Word; // The high field of the timestamp multiplexed with the version number
@@ -180,21 +180,17 @@ type
       node: array[0..5] of Byte; // The spatially unique node identifier
     );
   end;
-
-{$I types.inc}
+  PGUID = ^TGUID;
 
 var
   FPC_EMPTYCHAR: AnsiChar; public name 'FPC_EMPTYCHAR';
   ExitCode: HRESULT = 0; export name 'operatingsystem_result';
 
 const
-  LineEnding = #13#10;
+  CRLF = #13#10;
 
-procedure fpc_initializeunits; compilerproc;
 procedure fpc_libinitializeunits; compilerproc;
-procedure fpc_do_exit; compilerproc;
 procedure fpc_lib_exit; compilerproc;
-
 function DriverEntry(DriverObject: Pointer; RegistryPath: Pointer): LongInt; stdcall; external name 'DriverEntry';
 
 const
@@ -210,15 +206,7 @@ begin
   result := DriverEntry(DriverObject, RegistryPath);
 end;
 
-procedure fpc_initializeunits; [public, alias: 'FPC_INITIALIZEUNITS'];
-begin
-end;
-
 procedure fpc_libinitializeunits; compilerproc; [public, alias: 'FPC_LIBINITIALIZEUNITS'];
-begin
-end;
-
-procedure fpc_do_exit; [public, alias: 'FPC_DO_EXIT'];
 begin
 end;
 
