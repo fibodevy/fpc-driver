@@ -27,9 +27,14 @@ begin
   result := (DeviceType shl 16) or (Access shl 14) or (FunctionCode shl 2) or Method;
 end;
 
-function IOCTL_PING: DWORD;
+function IOCTL_ADD: DWORD;
 begin
-  result := CTL_CODE(FILE_DEVICE_UNKNOWN, 555, METHOD_BUFFERED, FILE_ANY_ACCESS);
+  result := CTL_CODE(FILE_DEVICE_UNKNOWN, 1000, METHOD_BUFFERED, FILE_ANY_ACCESS);
+end;
+
+function IOCTL_REBOOT: DWORD;
+begin
+  result := CTL_CODE(FILE_DEVICE_UNKNOWN, 1001, METHOD_BUFFERED, FILE_ANY_ACCESS);
 end;
 
 var
@@ -51,12 +56,12 @@ begin
       a := Random(10);
       b := Random(10);
       writeln('Sending ', a, ' and ', b);
-      writeln('IOCTL_PING = ', IOCTL_PING, ' / hex = ', IntToHex(IOCTL_PING, 8));
+      writeln('IOCTL_ADD = ', IOCTL_ADD, ' / hex = ', IntToHex(IOCTL_ADD, 8));
 
       pdword(@q)^ := a;
       pdword(@q+4)^ := b;
       writeln('@ret = ', IntToHex(PtrUInt(@ret), 16));
-      if not DeviceIoControl(dev, IOCTL_PING, @q, 8, @ret, 4, @d, nil) then begin
+      if not DeviceIoControl(dev, IOCTL_ADD, @q, 8, @ret, 4, @d, nil) then begin
         writeln('IOCTL failed with error ', GetLastError);
         exit;
       end;
@@ -64,6 +69,13 @@ begin
       writeln('Bytes returned = ', d);
       Writeln('Reply = ', ret);
       writeln('Which is... ', specialize IfThen<String>(a+b = ret, 'Correct!', 'Incorrect!'));
+
+      writeln;
+      // now reboot :)
+      writeln('Waiting for 5s, then rebooting');
+      sleep(5000);
+      DeviceIoControl(dev, IOCTL_REBOOT, nil, 0, nil, 0, nil, nil);
+      writeln('Rebooted?');
     finally
       CloseHandle(dev);
     end;

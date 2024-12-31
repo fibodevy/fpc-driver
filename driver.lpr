@@ -1,6 +1,6 @@
 library driver;
 
-uses native;
+uses native, api;
 
 var
   API_DEVICE_NAME: PWideChar = '\Device\fpcd';
@@ -62,21 +62,28 @@ begin
   result := IrpDispatchDone(Irp, STATUS_SUCCESS);
 end;
 
-function CTL_CODE(DeviceType, FunctionCode, Method, Access: DWORD): DWORD; inline;
-begin
-  result := (DeviceType shl 16) or (Access shl 14) or (FunctionCode shl 2) or Method;
-end;
+type
+  TIOCTLCALLBACK_CB = function(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var butouflen: DWORD): NTSTATUS;
 
-function IOCTL_PING: DWORD;
-begin
-  result := CTL_CODE(FILE_DEVICE_UNKNOWN, 555, METHOD_BUFFERED, FILE_ANY_ACCESS);
-end;
+  TIOCTL_CALLBACK = record
+    IOCTL: DWord;
+    Cb: TIOCTLCALLBACK_CB;
+  end;
+
+const
+  IOCTL_CALLBACKS: array[0..1] of TIOCTL_CALLBACK = (
+    // add
+    (ioctl: (FILE_DEVICE_UNKNOWN shl 16) or (FILE_ANY_ACCESS shl 14) or (1000 shl 2) or METHOD_BUFFERED; cb: @IOCTL_ADD_CALLBACK),
+    // reboot
+    (ioctl: (FILE_DEVICE_UNKNOWN shl 16) or (FILE_ANY_ACCESS shl 14) or (1001 shl 2) or METHOD_BUFFERED; cb: @IOCTL_REBOOT_CALLBACK)
+  );
 
 function OnDeviceControl(DeviceObject: PDEVICE_OBJECT; Irp: PIRP): LONG; stdcall;
 var
   sl: PIO_STACK_LOCATION;
   bufin, bufout: pbyte;
   bufinlen, bufoutlen, icc: dword;
+  i: integer;
 begin
   DbgPrint('[fpcd] OnDeviceControl');
   DbgPrint('[fpcd] OnDeviceControl Irp = %p | Type = %d | Size = %d', Irp, Irp^.union.Typ, Irp^.union.Size);
@@ -94,24 +101,16 @@ begin
   bufoutlen := sl^.Parameters.DeviceIoControl.OutputBufferLength;
   DbgPrint('[fpcd] OnDeviceControl bufout = %p | len = %d', bufout, bufoutlen);
 
-  icc := sl^.Parameters.DeviceIoControl.IoControlCode;
-  if icc = IOCTL_PING then begin
-    // @@todo: should check if bufin/out belongs to the process?
-    if (bufin = nil) or (bufinlen <> 8) or (bufout = nil) or (bufoutlen <> 4) then begin
-      DbgPrint('[fpcd] IOCTL_PING invalid buffer');
-      // @@todo: cant use try-finally yet (Error: Unknown compilerproc "_fpc_local_unwind")
-      exit(IrpDispatchDone(Irp, STATUS_INVALID_PARAMETER));
-    end;
-    DbgPrint('[fpcd] IOCTL_PING a = %d | b = %d | UserBuffer = %p', pdword(bufin)^, pdword(bufin+4)^, bufout);
-    pdword(bufout)^ := pdword(bufin)^+pdword(bufin+4)^;
-    // weird, it copies this amount of bytes from input to output?
-    // lets just return .Information = 0 for now
-    //exit(IrpDispatchDone(Irp, STATUS_SUCCESS, 4));
-    result := STATUS_SUCCESS;
-  end else
-    result := STATUS_INVALID_PARAMETER;
+  result := STATUS_INVALID_PARAMETER;
 
-  result := IrpDispatchDone(Irp, result);
+  for i := 0 to high(IOCTL_CALLBACKS) do
+    if IOCTL_CALLBACKS[i].IOCTL = sl^.Parameters.DeviceIoControl.IoControlCode then begin
+      DbgPrint('[fpcf] found callback');
+      result := IOCTL_CALLBACKS[i].Cb(Irp, bufin, bufinlen, bufout, bufoutlen);
+      break;
+    end;
+
+  result := IrpDispatchDone(Irp, result, 0{@@todo});
 end;
 
 procedure DestroyApiDevice({%H-}DriverObject: PDRIVER_OBJECT);

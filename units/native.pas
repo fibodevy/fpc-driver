@@ -21,6 +21,7 @@ const
   STATUS_ACCESS_DENIED          = NTSTATUS($C0000022); // Access to the requested resource was denied
   STATUS_OBJECT_NAME_NOT_FOUND  = NTSTATUS($C0000034); // The specified object name was not found
   STATUS_BUFFER_TOO_SMALL       = NTSTATUS($C0000023); // The provided buffer is too small to hold the data
+  STATUS_PRIVILEGE_NOT_HELD     = NTSTATUS($C0000061); // The requested privilege is not held by the client
 
 // https://learn.microsoft.com/en-us/windows-hardware/drivers/debuggercmds/-irp
 // Major function codes for IRP (I/O Request Packet)
@@ -211,6 +212,8 @@ function NT_INFORMATION(status: NTSTATUS): Boolean; inline;
 function NT_WARNING(status: NTSTATUS): Boolean; inline;
 function NT_ERROR(status: NTSTATUS): Boolean; inline;
 
+function CTL_CODE(DeviceType, FunctionCode, Method, Access: DWORD): DWORD; inline;
+
 // get Irp.Tail.Overlay.CurrentStackLocation
 function IoGetCurrentIrpStackLocation(Irp: PIRP): PIO_STACK_LOCATION; inline;
 // get Irp.UserBuffer; temp function until the struct is complete
@@ -242,7 +245,30 @@ type
   );
   SHUTDOWN_ACTION = _SHUTDOWN_ACTION;
 
-procedure NtShutdownSystem(ShutdownAction: SHUTDOWN_ACTION); stdcall; external ntoskrnl;
+function NtShutdownSystem(ShutdownAction: SHUTDOWN_ACTION): NTSTATUS; stdcall; external ntoskrnl;
+
+const
+  HalPowerDownRoutine    = 0; // Power down the system.
+  HalRestartRoutine      = 1; // Restart the system (cold reboot)
+  HalRebootRoutine       = 2; // Reboot the system (warm reboot)
+  HalInteractiveMode     = 3; // Enter interactive mode (e.g., BIOS/UEFI setup)
+  HalMaximumRoutine      = 4; // Maximum value (used internally, not a valid action)
+
+procedure HalReturnToFirmware(FirmwareAction: ULONG); stdcall; external ntoskrnl;
+
+const
+  PASSIVE_LEVEL      = 0;  // Passive level (lowest, for user-mode and non-critical operations)
+  APC_LEVEL          = 1;  // APC level (used for APC execution)
+  DISPATCH_LEVEL     = 2;  // Dispatch level (used for synchronization and high-priority tasks)
+  CLOCK_LEVEL        = 13; // Clock level (used internally by the system timer)
+  DEVICE_LEVEL       = 14; // Device level (used for device interrupt servicing)
+  HIGH_LEVEL         = 15; // High level (highest priority, typically used for hardware interrupt handling)
+
+type
+  KIRQL = Byte;
+
+procedure KeLowerIrql(NewIrql: KIRQL); stdcall; external ntoskrnl;
+function KeGetCurrentIrql: KIRQL; stdcall; external ntoskrnl;
 
 implementation
 
@@ -282,6 +308,11 @@ end;
 function NT_ERROR(status: NTSTATUS): Boolean;
 begin
   result := ULONG(status) shr 30 = 3;
+end;
+
+function CTL_CODE(DeviceType, FunctionCode, Method, Access: DWORD): DWORD;
+begin
+  result := (DeviceType shl 16) or (Access shl 14) or (FunctionCode shl 2) or Method;
 end;
 
 end.
