@@ -26,26 +26,26 @@ var
   devname, linkname: UNICODE_STRING;
   devobj: PDEVICE_OBJECT;
 begin
-  DbgPrint('[fpcd] CreateApiDevice'+CRLF);
+  DbgPrint('[fpcd] CreateApiDevice');
 
   RtlInitUnicodeString(@devname, API_DEVICE_NAME);
   result := IoCreateDevice(DriverObject, 0, @devname, FILE_DEVICE_UNKNOWN, 0, false, devobj);
-  DbgPrint('[fpcd] IoCreateDevice result = %p'+CRLF, result);
+  DbgPrint('[fpcd] IoCreateDevice result = %p', result);
   if not NT_SUCCESS(result) then begin
-    DbgPrint('[fpcd] CreateApiDevice: IoCreateDevice failed'+CRLF);
+    DbgPrint('[fpcd] CreateApiDevice: IoCreateDevice failed');
     exit;
   end;
 
   RtlInitUnicodeString(@linkname, API_LINK_NAME);
   result := IoCreateSymbolicLink(@linkname, @devname);
-  DbgPrint('[fpcd] IoCreateSymbolicLink result = %p'+CRLF, result);
+  DbgPrint('[fpcd] IoCreateSymbolicLink result = %p', result);
   if not NT_SUCCESS(result) then begin
-    DbgPrint('[fpcd] CreateApiDevice: IoCreateSymbolicLink failed'+CRLF);
+    DbgPrint('[fpcd] CreateApiDevice: IoCreateSymbolicLink failed');
     IoDeleteDevice(devobj);
     exit;
   end;
 
-  DbgPrint('[fpcd] CreateApiDevice: device created'+CRLF);
+  DbgPrint('[fpcd] CreateApiDevice: device created');
   ApiDevice := devobj;
   result := STATUS_SUCCESS;
 end;
@@ -62,27 +62,11 @@ begin
   result := IrpDispatchDone(Irp, STATUS_SUCCESS);
 end;
 
-type
-  TIOCTLCALLBACK_CB = function(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var butouflen: DWORD): NTSTATUS;
-
-  TIOCTL_CALLBACK = record
-    IOCTL: DWord;
-    Cb: TIOCTLCALLBACK_CB;
-  end;
-
-const
-  IOCTL_CALLBACKS: array[0..1] of TIOCTL_CALLBACK = (
-    // add
-    (ioctl: (FILE_DEVICE_UNKNOWN shl 16) or (FILE_ANY_ACCESS shl 14) or (1000 shl 2) or METHOD_BUFFERED; cb: @IOCTL_ADD_CALLBACK),
-    // reboot
-    (ioctl: (FILE_DEVICE_UNKNOWN shl 16) or (FILE_ANY_ACCESS shl 14) or (1001 shl 2) or METHOD_BUFFERED; cb: @IOCTL_REBOOT_CALLBACK)
-  );
-
 function OnDeviceControl(DeviceObject: PDEVICE_OBJECT; Irp: PIRP): LONG; stdcall;
 var
   sl: PIO_STACK_LOCATION;
   bufin, bufout: pbyte;
-  bufinlen, bufoutlen, icc: dword;
+  bufinlen, bufoutlen: dword;
   i: integer;
 begin
   DbgPrint('[fpcd] OnDeviceControl');
@@ -110,16 +94,16 @@ begin
       break;
     end;
 
-  result := IrpDispatchDone(Irp, result, 0{@@todo});
+  result := IrpDispatchDone(Irp, result);
 end;
 
 procedure DestroyApiDevice({%H-}DriverObject: PDRIVER_OBJECT);
 var
   linkname: UNICODE_STRING;
 begin
-  DbgPrint('[fpcd] DestroyApiDevice'+CRLF);
+  DbgPrint('[fpcd] DestroyApiDevice');
   if ApiDevice = nil then begin
-    DbgPrint('[fpcd] DestroyApiDevice: ApiDevice is nil'+CRLF);
+    DbgPrint('[fpcd] DestroyApiDevice: ApiDevice is nil');
     exit;
   end;
   RtlInitUnicodeString(@linkname, API_LINK_NAME);
@@ -130,7 +114,7 @@ end;
 
 procedure DriverUnload(DriverObject: PDRIVER_OBJECT); stdcall;
 begin
-  DbgPrint('[fpcd] DriverUnload'+CRLF);
+  DbgPrint('[fpcd] DriverUnload');
   DestroyApiDevice(DriverObject);
 end;
 
@@ -138,12 +122,7 @@ function {%H-}DriverEntry(DriverObject: PDRIVER_OBJECT; RegistryPath: PUNICODE_S
 var
   i: integer;
 begin
-  DbgPrint(CRLF);
-  DbgPrint('[fpcd] Hello World! Windows Kernel Mode Driver in FPC'+CRLF);
-  DbgPrint('[fpcd] Build time  = '+{$I %DATE%}+' '+{$I %TIME%}+CRLF);
-  DbgPrint('[fpcd] FPC version = '+{$I %FPCVERSION%}+CRLF);
-  DbgPrint('[fpcd] FPC target  = '+{$I %FPCTARGET%}+CRLF);
-  DbgPrint(CRLF);
+  DbgPrint('[fpcd] FPC version = %s | target = %s | build time = %s', {$I %FPCVERSION%}, {$I %FPCTARGET%}, {$I %DATE%}+' '+{$I %TIME%});
 
   for i := 0 to high(DriverObject^.MajorFunction) do
     DriverObject^.MajorFunction[i] := @OnOther;
@@ -156,8 +135,7 @@ begin
 
   result := CreateApiDevice(DriverObject);
 
-  DbgPrint('[fpcd] End of DriverEntry'+CRLF);
-  DbgPrint(CRLF);
+  DbgPrint('[fpcd] End of DriverEntry | result = %p', result);
 end;
 
 end.

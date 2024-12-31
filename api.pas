@@ -6,12 +6,26 @@ interface
 
 uses native;
 
-function IOCTL_ADD_CALLBACK(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS; 
-function IOCTL_REBOOT_CALLBACK(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS;
+function IOCTL_CALLBACK_ADD(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS;
+function IOCTL_CALLBACK_REBOOT(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS;
+
+type
+  TIOCTL_CALLBACK = record
+    IOCTL: DWord;
+    Cb: function(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var butouflen: DWORD): NTSTATUS;
+  end;
+
+const
+  IOCTL_CALLBACKS: array[0..1] of TIOCTL_CALLBACK = (
+    // add
+    (ioctl: (FILE_DEVICE_UNKNOWN shl 16) or (FILE_ANY_ACCESS shl 14) or (1000 shl 2) or METHOD_BUFFERED; cb: @IOCTL_CALLBACK_ADD),
+    // reboot
+    (ioctl: (FILE_DEVICE_UNKNOWN shl 16) or (FILE_ANY_ACCESS shl 14) or (1001 shl 2) or METHOD_BUFFERED; cb: @IOCTL_CALLBACK_REBOOT)
+  );
 
 implementation
 
-function IOCTL_ADD_CALLBACK(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS;
+function IOCTL_CALLBACK_ADD(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS;
 begin
   // @@todo: should check if bufin/out belongs to the process?
   if (bufin = nil) or (bufinlen <> 8) or (bufout = nil) or (bufoutlen <> 4) then begin
@@ -22,12 +36,10 @@ begin
   DbgPrint('[fpcd] IOCTL_PING a = %d | b = %d | UserBuffer = %p', pdword(bufin)^, pdword(bufin+4)^, bufout);
   pdword(bufout)^ := pdword(bufin)^+pdword(bufin+4)^;
 
-  // weird, it copies this amount of bytes from input to output?
-  // lets just return .Information = 0 for now
   result := STATUS_SUCCESS;
 end;
 
-function IOCTL_REBOOT_CALLBACK(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS;
+function IOCTL_CALLBACK_REBOOT(var Irp: PIRP; var bufin: PByte; var bufinlen: DWORD; var bufout: PByte; var bufoutlen: DWORD): NTSTATUS;
 begin
   result := NtShutdownSystem(ShutdownReboot);
   DbgPrint('[fpcd] IRQL         = %d', KeGetCurrentIrql); // level 0 here
